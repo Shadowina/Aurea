@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { MOOD_OPTIONS, getMoodById } from '../constants/moods.js';
-import { useMoods } from '../context/MoodContext.jsx';
+import { MOOD_OPTIONS, getMoodById } from '../../../constants/moods.js';
+import { useMoods } from '../../../context/MoodContext.jsx';
 
 const tagsFromInput = (value) =>
   value
@@ -24,6 +24,8 @@ export default function MoodEntryForm({ onClose }) {
   const [showSpotifyInput, setShowSpotifyInput] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const selectedMood = useMemo(() => getMoodById(form.moodId), [form.moodId]);
 
@@ -58,46 +60,55 @@ export default function MoodEntryForm({ onClose }) {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (!validate()) return;
+    setSubmitError('');
+    setIsSubmitting(true);
 
     const mood = getMoodById(form.moodId);
     // To store the timestamp inside the saved record so we can sort later
     const now = new Date().toISOString();
-    addEntry({
-      dateTime: now,
-      note: form.notes.trim(),
-      moodId: form.moodId,
-      moodLabel: mood?.label ?? 'Mood',
-      emoji: mood?.emoji ?? '🙂',
-      color: form.color,
-      tags: tagsFromInput(form.tagDraft),
-      spotifyLink: form.spotifyLink.trim(),
-      imageData: form.imageData,
-      visibility: form.visibility,
-    });
 
-    // To reset state and hide optional sections for the next entry
-    updateForm({
-      moodId: '',
-      notes: '',
-      color: '#78C0A8',
-      tagDraft: '',
-      spotifyLink: '',
-      imageData: null,
-      visibility: 'private',
-    });
-    setShowSpotifyInput(false);
-    setShowImagePicker(false);
-    setShowMoodPicker(false);
-    setShowSuccess(true);
-    const successTimeout = setTimeout(() => setShowSuccess(false), 1200);
-    if (typeof onClose === 'function') {
-      setTimeout(() => {
-        onClose();
-        clearTimeout(successTimeout);
-      }, 400);
+    try {
+      await addEntry({
+        dateTime: now,
+        note: form.notes.trim(),
+        moodId: form.moodId,
+        moodLabel: mood?.label ?? 'Mood',
+        emoji: mood?.emoji ?? '🙂',
+        color: form.color,
+        tags: tagsFromInput(form.tagDraft),
+        spotifyLink: form.spotifyLink.trim(),
+        imageData: form.imageData,
+        visibility: form.visibility,
+      });
+
+      // To reset state and hide optional sections for the next entry
+      updateForm({
+        moodId: '',
+        notes: '',
+        color: '#78C0A8',
+        tagDraft: '',
+        spotifyLink: '',
+        imageData: null,
+        visibility: 'private',
+      });
+      setShowSpotifyInput(false);
+      setShowImagePicker(false);
+      setShowMoodPicker(false);
+      setShowSuccess(true);
+      const successTimeout = setTimeout(() => setShowSuccess(false), 1200);
+      if (typeof onClose === 'function') {
+        setTimeout(() => {
+          onClose();
+          clearTimeout(successTimeout);
+        }, 400);
+      }
+    } catch (error) {
+      setSubmitError(error?.message || 'We could not save your entry. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -105,17 +116,17 @@ export default function MoodEntryForm({ onClose }) {
     <section className="relative">
       <form
         onSubmit={handleSubmit}
-        className="card relative max-h-[90vh] w-full overflow-hidden border border-white/60 shadow-soft"
+        className="card relative max-h-[90vh] w-full overflow-hidden border border-white/70 bg-white/95 shadow-soft"
         aria-label="Mood entry form"
       >
-        <div className="bg-white/80 px-6 pt-6 sm:px-8 sm:pt-7">
-          <div className="flex items-start justify-between gap-4 border-b border-white/60 pb-4">
+        <div className="bg-gradient-to-b from-white to-slate-50/60 px-6 pt-6 sm:px-8 sm:pt-7">
+          <div className="flex items-start justify-between gap-4 border-b border-white/80 pb-4">
             <div className="flex flex-col gap-1">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Share an update</p>
-            <h2 className="text-2xl font-semibold text-midnight">How are you feeling right now?</h2>
-            <p className="text-sm text-slate-500">
-              Capture the moment like a social post: mood, tags, color, and anything else that sets the tone.
-            </p>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Share an update</p>
+              <h2 className="text-2xl font-semibold text-midnight">How are you feeling right now?</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Capture this moment with mood, notes, tags, and optional media.
+              </p>
             </div>
             {typeof onClose === 'function' && (
               <button
@@ -128,9 +139,14 @@ export default function MoodEntryForm({ onClose }) {
               </button>
             )}
           </div>
+          {submitError && (
+            <div className="mt-4 rounded-xl border border-peach/40 bg-peach/10 px-4 py-3 text-sm text-slate-700">
+              {submitError}
+            </div>
+          )}
 
           <div className="mt-6 grid max-h-[58vh] gap-7 overflow-y-auto pr-1">
-            <div className="space-y-3">
+            <div className="space-y-3 rounded-2xl border border-white/80 bg-white/80 p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-midnight">Mood *</p>
                 <button
@@ -143,7 +159,7 @@ export default function MoodEntryForm({ onClose }) {
               </div>
 
               {selectedMood ? (
-                <div className="flex items-center gap-3 rounded-2xl border border-white bg-white/70 px-4 py-3 shadow-soft">
+                <div className="flex items-center gap-3 rounded-2xl border border-white bg-white px-4 py-3 shadow-soft">
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/90 text-2xl shadow-inner">
                     {selectedMood.emoji}
                   </span>
@@ -157,7 +173,7 @@ export default function MoodEntryForm({ onClose }) {
               )}
 
               {showMoodPicker && (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 rounded-2xl bg-slate-50/80 p-3">
                   {MOOD_OPTIONS.map((option) => (
                     <button
                       key={option.id}
@@ -184,7 +200,7 @@ export default function MoodEntryForm({ onClose }) {
               {errors.moodId && <p className="text-sm text-peach">{errors.moodId}</p>}
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-3 rounded-2xl border border-white/80 bg-white/80 p-4">
               <label htmlFor="note" className="text-sm font-semibold text-midnight">
                 Notes *
               </label>
@@ -201,7 +217,7 @@ export default function MoodEntryForm({ onClose }) {
               {errors.notes && <p className="text-sm text-peach">{errors.notes}</p>}
             </div>
 
-            <div className="flex flex-wrap items-center gap-4 rounded-2xl bg-white/70 px-4 py-4">
+            <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/80 bg-white/80 px-4 py-4">
               <label className="flex items-center gap-3 text-sm font-medium text-midnight">
                 <span className="text-xl" aria-hidden="true">
                   🎨
@@ -238,7 +254,7 @@ export default function MoodEntryForm({ onClose }) {
               </button>
             </div>
 
-            <label className="flex flex-col gap-2 text-sm font-semibold text-midnight">
+            <label className="flex flex-col gap-2 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm font-semibold text-midnight">
               Tags
               <input
                 type="text"
@@ -248,12 +264,12 @@ export default function MoodEntryForm({ onClose }) {
                 placeholder="e.g. #gratitude, #family"
               />
               <span className="text-xs font-normal text-slate-500">
-                Separate with commas — we’ll use them for filtering later.
+                Separate with commas 
               </span>
             </label>
 
             {showSpotifyInput && (
-              <label className="flex flex-col gap-2 text-sm font-semibold text-midnight">
+              <label className="flex flex-col gap-2 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm font-semibold text-midnight">
                 Spotify link
                 <input
                   type="url"
@@ -266,7 +282,7 @@ export default function MoodEntryForm({ onClose }) {
             )}
 
             {showImagePicker && (
-              <label className="flex flex-col gap-3 rounded-2xl border border-dashed border-neutral/80 bg-white/60 px-5 py-5 text-sm font-semibold text-midnight">
+              <label className="flex flex-col gap-3 rounded-2xl border border-dashed border-neutral/80 bg-white/75 px-5 py-5 text-sm font-semibold text-midnight">
                 Upload photo
                 <span className="text-sm font-normal text-slate-500">
                   Add one image to bring your day to life.
@@ -296,7 +312,7 @@ export default function MoodEntryForm({ onClose }) {
               </div>
             )}
 
-            <div className="flex items-center justify-between rounded-2xl bg-white/60 px-4 py-4 text-sm text-slate-600">
+            <div className="flex items-center justify-between rounded-2xl border border-white/80 bg-white/80 px-4 py-4 text-sm text-slate-600">
               <div className="flex flex-col">
                 <span className="font-semibold text-midnight">Privacy</span>
                 <span>Entries stay private unless you explicitly share them.</span>
@@ -308,9 +324,10 @@ export default function MoodEntryForm({ onClose }) {
           </div>
         </div>
 
-        <div className="sticky bottom-0 flex items-center justify-between gap-3 bg-slate-900/95 px-6 py-4 sm:px-8">
+        <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-white/10 bg-midnight/95 px-6 py-4 sm:px-8">
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => {
               if (typeof onClose === 'function') onClose();
               updateForm({
@@ -333,10 +350,10 @@ export default function MoodEntryForm({ onClose }) {
           </button>
           <button
             type="submit"
-            disabled={!form.moodId || !form.notes.trim()}
+            disabled={isSubmitting || !form.moodId || !form.notes.trim()}
             className="btn btn-primary flex w-full items-center justify-center gap-2 bg-white/10 text-base font-semibold tracking-wide text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/50"
           >
-            {selectedMood ? `${selectedMood.emoji} Post` : 'Post'}
+            {isSubmitting ? 'Posting...' : selectedMood ? `${selectedMood.emoji} Post` : 'Post'}
           </button>
         </div>
       </form>
@@ -351,4 +368,3 @@ export default function MoodEntryForm({ onClose }) {
     </section>
   );
 }
-

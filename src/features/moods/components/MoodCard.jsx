@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
-import { getMoodById } from '../constants/moods.js';
-import { useMoods } from '../context/MoodContext.jsx';
+import { useMemo, useState } from 'react';
+import { getMoodById } from '../../../constants/moods.js';
+import { useMoods } from '../../../context/MoodContext.jsx';
 
 const formatDisplayDate = (isoString) => {
   if (!isoString) return '';
@@ -17,6 +17,32 @@ const formatDisplayDate = (isoString) => {
 export default function MoodCard({ entry }) {
   const { toggleFavorite, removeEntry } = useMoods();
   const moodMeta = useMemo(() => getMoodById(entry.moodId), [entry.moodId]);
+  const [isMutating, setIsMutating] = useState(false);
+  const [actionError, setActionError] = useState('');
+
+  const handleToggleFavorite = async () => {
+    setIsMutating(true);
+    setActionError('');
+    try {
+      await toggleFavorite(entry.id);
+    } catch (error) {
+      setActionError(error?.message || 'We could not update this favorite right now.');
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setIsMutating(true);
+    setActionError('');
+    try {
+      await removeEntry(entry.id);
+    } catch (error) {
+      setActionError(error?.message || 'We could not remove this entry right now.');
+    } finally {
+      setIsMutating(false);
+    }
+  };
 
   return (
     <article
@@ -43,7 +69,8 @@ export default function MoodCard({ entry }) {
           </div>
 
           <button
-            onClick={() => toggleFavorite(entry.id)}
+            onClick={handleToggleFavorite}
+            disabled={isMutating}
             className={`rounded-full px-3 py-1 text-sm font-medium transition ${
               entry.favorite ? 'bg-teal text-white shadow-soft' : 'bg-white/80 text-slate-500 hover:bg-white'
             }`}
@@ -93,15 +120,16 @@ export default function MoodCard({ entry }) {
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              onClick={() => removeEntry(entry.id)}
+              disabled={isMutating}
+              onClick={handleRemove}
               className="rounded-full px-3 py-1 text-xs uppercase tracking-wide text-slate-400 transition hover:bg-white/80 hover:text-midnight"
             >
               Remove
             </button>
           </div>
         </footer>
+        {actionError && <p className="text-sm text-peach">{actionError}</p>}
       </div>
     </article>
   );
 }
-

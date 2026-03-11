@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '../config/firebase.js';
+import { auth } from '../../../config/firebase.js';
 
 const googleProvider = new GoogleAuthProvider();
 

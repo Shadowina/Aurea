@@ -1,8 +1,8 @@
 import MoodCard from './MoodCard.jsx';
-import { useMoods } from '../context/MoodContext.jsx';
+import { useMoods } from '../../../context/MoodContext.jsx';
 
 export default function FavoritesGallery({ variant = 'grid' }) {
-  const { favorites } = useMoods();
+  const { favorites, loading, error } = useMoods();
 
   if (variant === 'compact') {
     return (
@@ -17,7 +17,13 @@ export default function FavoritesGallery({ variant = 'grid' }) {
           </span>
         </header>
 
-        {favorites.length === 0 ? (
+        {loading ? (
+          <p className="mt-6 text-sm text-slate-500">Loading highlights...</p>
+        ) : error ? (
+          <p className="mt-6 rounded-xl border border-peach/40 bg-peach/5 px-3 py-2 text-sm text-slate-600">
+            {error}
+          </p>
+        ) : favorites.length === 0 ? (
           <p className="mt-6 text-sm text-slate-500">
             Tap the star on any entry to start a highlight reel.
           </p>
@@ -45,13 +51,20 @@ export default function FavoritesGallery({ variant = 'grid' }) {
       <header className="flex flex-col gap-2">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Highlights</p>
         <h2 className="text-2xl font-semibold text-midnight">Saved moments</h2>
-        <p className="text-sm text-slate-500">
-          Your favorited entries live here—perfect for revisiting meaningful days or creating a
-          reflection ritual.
-        </p>
+        
       </header>
 
-      {favorites.length === 0 ? (
+      {loading ? (
+        <div className="card border border-white/70 px-6 py-12 text-center text-slate-500">
+          <p className="text-lg font-medium text-midnight">Loading favorites...</p>
+          <p className="text-sm text-slate-500">Fetching your saved moments.</p>
+        </div>
+      ) : error ? (
+        <div className="card border border-peach/40 bg-peach/5 px-6 py-8 text-center text-slate-600">
+          <p className="text-lg font-medium text-midnight">Could not load favorites</p>
+          <p className="mt-1 text-sm">{error}</p>
+        </div>
+      ) : favorites.length === 0 ? (
         <div className="card border border-dashed border-neutral/70 px-6 py-12 text-center text-slate-500">
           <p className="text-lg font-medium text-midnight">No favorites yet</p>
           <p className="text-sm text-slate-500">

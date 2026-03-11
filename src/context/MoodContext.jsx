@@ -1,82 +1,163 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-
-const STORAGE_KEY = 'moodboardme.entries';
+import { onAuthStateChanged } from 'firebase/auth';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from 'firebase/firestore';
+import { auth, db } from '../config/firebase.js';
 
 const MoodContext = createContext(undefined);
 
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).slice(2, 10);
+const toIsoString = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value?.toDate === 'function') return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return null;
 };
 
-const readFromStorage = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((entry) => ({
-      ...entry,
-      note: entry.note ?? entry.notes ?? '',
-      tags: Array.isArray(entry.tags) ? entry.tags : [],
-      createdAt: entry.createdAt ?? entry.timestamp ?? new Date().toISOString(),
-      favorite: Boolean(entry.favorite),
-    }));
-  } catch (error) {
-    console.error('Failed to load mood entries', error);
-    return [];
-  }
-};
-
-const writeToStorage = (entries) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  } catch (error) {
-    console.error('Failed to persist mood entries', error);
-  }
+const normalizeEntry = (id, entry) => {
+  const createdAt = toIsoString(entry.createdAt) ?? toIsoString(entry.timestamp) ?? new Date().toISOString();
+  const dateTime = entry.dateTime ?? createdAt;
+  return {
+    id,
+    ...entry,
+    note: entry.note ?? entry.notes ?? '',
+    tags: Array.isArray(entry.tags) ? entry.tags : [],
+    dateTime,
+    createdAt,
+    updatedAt: toIsoString(entry.updatedAt) ?? createdAt,
+    favorite: Boolean(entry.favorite),
+  };
 };
 
 export const MoodProvider = ({ children }) => {
-  const [entries, setEntries] = useState(() => readFromStorage());
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [currentUser, setCurrentUser] = useState(() => auth.currentUser);
 
   useEffect(() => {
-    writeToStorage(entries);
-  }, [entries]);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const addEntry = (payload) => {
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setEntries([]);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
+    setLoading(true);
+    setError('');
+    const entriesRef = collection(db, 'users', currentUser.uid, 'entries');
+    const entriesQuery = query(entriesRef, orderBy('dateTime', 'desc'));
+    const unsubscribe = onSnapshot(
+      entriesQuery,
+      (snapshot) => {
+        const nextEntries = snapshot.docs.map((entryDoc) => normalizeEntry(entryDoc.id, entryDoc.data()));
+        setEntries(nextEntries);
+        setLoading(false);
+      },
+      (snapshotError) => {
+        console.error('Failed to subscribe to mood entries', snapshotError);
+        setError('We could not load your entries right now. Please try again.');
+        setEntries([]);
+        setLoading(false);
+      },
+    );
+
+    return () => unsubscribe();
+  }, [currentUser?.uid]);
+
+  const addEntry = async (payload) => {
+    if (!currentUser?.uid) {
+      const authError = new Error('You must be signed in to add an entry.');
+      setError(authError.message);
+      throw authError;
+    }
+
+    setError('');
+    const now = new Date().toISOString();
     const entry = {
-      id: generateId(),
       favorite: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      dateTime: payload.dateTime ?? now,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       ...payload,
     };
-    setEntries((prev) => [entry, ...prev]);
+
+    try {
+      await addDoc(collection(db, 'users', currentUser.uid, 'entries'), entry);
+    } catch (writeError) {
+      console.error('Failed to add mood entry', writeError);
+      setError('We could not save your entry. Please try again.');
+      throw writeError;
+    }
   };
 
-  const toggleFavorite = (id) => {
-    setEntries((prev) =>
-      prev.map((entry) =>
-        entry.id === id ? { ...entry, favorite: !entry.favorite, updatedAt: new Date().toISOString() } : entry,
-      ),
-    );
+  const toggleFavorite = async (id) => {
+    if (!currentUser?.uid) {
+      const authError = new Error('You must be signed in to update an entry.');
+      setError(authError.message);
+      throw authError;
+    }
+
+    const target = entries.find((entry) => entry.id === id);
+    if (!target) return;
+    setError('');
+
+    try {
+      await updateDoc(doc(db, 'users', currentUser.uid, 'entries', id), {
+        favorite: !target.favorite,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (writeError) {
+      console.error('Failed to toggle favorite', writeError);
+      setError('We could not update this favorite right now. Please try again.');
+      throw writeError;
+    }
   };
 
-  const removeEntry = (id) => {
-    setEntries((prev) => prev.filter((entry) => entry.id !== id));
+  const removeEntry = async (id) => {
+    if (!currentUser?.uid) {
+      const authError = new Error('You must be signed in to remove an entry.');
+      setError(authError.message);
+      throw authError;
+    }
+
+    setError('');
+    try {
+      await deleteDoc(doc(db, 'users', currentUser.uid, 'entries', id));
+    } catch (deleteError) {
+      console.error('Failed to remove entry', deleteError);
+      setError('We could not delete this entry right now. Please try again.');
+      throw deleteError;
+    }
   };
 
   const value = useMemo(
     () => ({
       entries,
+      loading,
+      error,
       addEntry,
       toggleFavorite,
       removeEntry,
       favorites: entries.filter((entry) => entry.favorite),
     }),
-    [entries],
+    [entries, loading, error],
   );
 
   return <MoodContext.Provider value={value}>{children}</MoodContext.Provider>;
