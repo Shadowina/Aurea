@@ -1,44 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import AuthGate from './features/auth/components/AuthGate.jsx'
+import AnalyticsPage from './features/analytics/pages/AnalyticsPage.jsx'
+import CalendarPage from './features/calendar/pages/CalendarPage.jsx'
 import DashboardPage from './features/dashboard/pages/DashboardPage.jsx'
-import { useMoods } from './context/MoodContext.jsx'
-import { auth } from './config/firebase.js'
+import GalleryPage from './features/gallery/pages/GalleryPage.jsx'
+import SettingsPage from './features/settings/pages/SettingsPage.jsx'
 
 function App() {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [showComposer, setShowComposer] = useState(false)
-  const { entries } = useMoods()
-  const totalEntries = entries.length
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser)
-      setLoading(false)
-    })
-
-    return () => unsubscribe()
-  }, [])
-
-  const heroCopy = useMemo(() => {
-    if (totalEntries === 0) return 'Begin your first entry to paint how today feels.'
-    if (totalEntries === 1) return 'Lovely start. Come back tomorrow to spot a pattern.'
-    return `You have ${totalEntries} logged days. Keep tracing how you move through the world.`
-  }, [totalEntries])
-
   return (
-    <AuthGate loading={loading} user={user}>
-      <DashboardPage
-        user={user}
-        totalEntries={totalEntries}
-        heroCopy={heroCopy}
-        showComposer={showComposer}
-        onOpenComposer={() => setShowComposer(true)}
-        onCloseComposer={() => setShowComposer(false)}
-        onSignOut={() => signOut(auth)}
-      />
+    <AuthGate>
+      <BrowserRouter>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/gallery" element={<GalleryPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ErrorBoundary>
+      </BrowserRouter>
     </AuthGate>
   )
 }

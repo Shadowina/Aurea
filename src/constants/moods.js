@@ -39,6 +39,46 @@ export const MOOD_OPTIONS = [
     accent: 'from-sky-200/80 to-sky-400/40',
     tags: ['soft', 'sensitive'],
   },
+  {
+    id: 'hopeful',
+    label: 'Hopeful',
+    emoji: '🌤️',
+    swatch: '#F5C26B',
+    accent: 'from-amber-200/70 to-amber-400/40',
+    tags: ['optimistic', 'forward'],
+  },
+  {
+    id: 'grounded',
+    label: 'Grounded',
+    emoji: '🌿',
+    swatch: '#7DA67A',
+    accent: 'from-green-200/70 to-green-400/40',
+    tags: ['steady', 'present'],
+  },
+  {
+    id: 'wistful',
+    label: 'Wistful',
+    emoji: '🌙',
+    swatch: '#9BB0C6',
+    accent: 'from-slate-200/80 to-slate-400/40',
+    tags: ['nostalgic', 'longing'],
+  },
+  {
+    id: 'playful',
+    label: 'Playful',
+    emoji: '🎈',
+    swatch: '#FF8DA1',
+    accent: 'from-rose-200/70 to-rose-400/40',
+    tags: ['light', 'fun'],
+  },
+  {
+    id: 'resilient',
+    label: 'Resilient',
+    emoji: '💪',
+    swatch: '#D4A574',
+    accent: 'from-orange-200/60 to-orange-400/40',
+    tags: ['strong', 'capable'],
+  },
 ];
 
 export const getMoodById = (id) => MOOD_OPTIONS.find((mood) => mood.id === id) ?? null;

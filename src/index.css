@@ -21,16 +21,30 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: color 200ms ease, background 200ms ease;
+  }
+
+  html.dark body {
+    color: #e6ecf2;
+    background: radial-gradient(circle at top right, rgba(120, 192, 168, 0.12), transparent 45%),
+      radial-gradient(circle at bottom left, rgba(247, 163, 153, 0.12), transparent 50%),
+      #12171c;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Nunito', 'Lato', sans-serif;
     color: #1F2933;
+    @apply dark:text-slate-100;
   }
 
   ::selection {
     background-color: rgba(120, 192, 168, 0.25);
     color: #1F2933;
+  }
+
+  .dark ::selection {
+    background-color: rgba(120, 192, 168, 0.35);
+    color: #f3f6f9;
   }
 }
 
@@ -52,6 +66,10 @@
 }
 
 @layer components {
+  .page-shell {
+    @apply min-h-screen bg-surface/95 text-charcoal transition-colors duration-200 dark:bg-slate-950 dark:text-slate-200;
+  }
+
   .btn {
     padding: 0.625rem 1.25rem;
     border-radius: 9999px;
@@ -70,10 +88,17 @@
     box-shadow: 0 20px 40px -18px rgba(31, 41, 51, 0.45);
   }
 
+  .dark .btn-primary {
+    background: linear-gradient(135deg, #6bb59d, #57a189);
+    color: white;
+    box-shadow: 0 12px 30px -18px rgba(120, 192, 168, 0.35);
+  }
+
   .card {
     border-radius: 1.75rem;
     background: rgba(255, 255, 255, 0.82);
     box-shadow: 0 30px 60px -40px rgba(31, 41, 51, 0.35);
     backdrop-filter: blur(12px);
+    @apply dark:bg-slate-800/70 dark:shadow-none dark:ring-1 dark:ring-white/5;
   }
 }

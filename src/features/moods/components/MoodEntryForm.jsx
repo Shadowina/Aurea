@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { MOOD_OPTIONS, getMoodById } from '../../../constants/moods.js';
-import { useMoods } from '../../../context/MoodContext.jsx';
+import { useMoods } from '../../../context/useMoods.js';
 
 const tagsFromInput = (value) =>
   value
@@ -8,21 +8,34 @@ const tagsFromInput = (value) =>
     .map((tag) => tag.trim().replace(/^#/, ''))
     .filter(Boolean);
 
-export default function MoodEntryForm({ onClose }) {
-  const { addEntry } = useMoods();
-  const [form, setForm] = useState({
-    moodId: '',
-    notes: '',
-    color: '#78C0A8',
-    tagDraft: '',
-    spotifyLink: '',
-    imageData: null,
-    visibility: 'private',
-  });
+function buildInitialForm(editingEntry) {
+  if (!editingEntry) {
+    return {
+      moodId: '',
+      notes: '',
+      color: '#78C0A8',
+      tagDraft: '',
+      spotifyLink: '',
+      imageData: null,
+    };
+  }
+  return {
+    moodId: editingEntry.moodId ?? '',
+    notes: editingEntry.note ?? '',
+    color: editingEntry.color ?? '#78C0A8',
+    tagDraft: (editingEntry.tags ?? []).join(', '),
+    spotifyLink: editingEntry.spotifyLink ?? '',
+    imageData: editingEntry.imageData ?? null,
+  };
+}
+
+export default function MoodEntryForm({ onClose, editingEntry = null }) {
+  const { addEntry, updateEntry } = useMoods();
+  const [form, setForm] = useState(() => buildInitialForm(editingEntry));
   const [errors, setErrors] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
-  const [showSpotifyInput, setShowSpotifyInput] = useState(false);
-  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showSpotifyInput, setShowSpotifyInput] = useState(() => Boolean(editingEntry?.spotifyLink?.trim()));
+  const [showImagePicker, setShowImagePicker] = useState(() => Boolean(editingEntry?.imageData));
   const [showMoodPicker, setShowMoodPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -47,6 +60,10 @@ export default function MoodEntryForm({ onClose }) {
     const reader = new FileReader();
     reader.onload = () => {
       updateForm({ imageData: reader.result });
+      setSubmitError('');
+    };
+    reader.onerror = () => {
+      setSubmitError('Could not read that image. Try another file.');
     };
     reader.readAsDataURL(file);
   };
@@ -67,33 +84,36 @@ export default function MoodEntryForm({ onClose }) {
     setIsSubmitting(true);
 
     const mood = getMoodById(form.moodId);
-    // To store the timestamp inside the saved record so we can sort later
-    const now = new Date().toISOString();
 
     try {
-      await addEntry({
-        dateTime: now,
-        note: form.notes.trim(),
-        moodId: form.moodId,
-        moodLabel: mood?.label ?? 'Mood',
-        emoji: mood?.emoji ?? '🙂',
-        color: form.color,
-        tags: tagsFromInput(form.tagDraft),
-        spotifyLink: form.spotifyLink.trim(),
-        imageData: form.imageData,
-        visibility: form.visibility,
-      });
+      if (editingEntry?.id) {
+        await updateEntry(editingEntry.id, {
+          note: form.notes.trim(),
+          moodId: form.moodId,
+          moodLabel: mood?.label ?? 'Mood',
+          emoji: mood?.emoji ?? '🙂',
+          color: form.color,
+          tags: tagsFromInput(form.tagDraft),
+          spotifyLink: form.spotifyLink.trim(),
+          imageData: form.imageData,
+          dateTime: editingEntry.dateTime,
+        });
+      } else {
+        const now = new Date().toISOString();
+        await addEntry({
+          dateTime: now,
+          note: form.notes.trim(),
+          moodId: form.moodId,
+          moodLabel: mood?.label ?? 'Mood',
+          emoji: mood?.emoji ?? '🙂',
+          color: form.color,
+          tags: tagsFromInput(form.tagDraft),
+          spotifyLink: form.spotifyLink.trim(),
+          imageData: form.imageData,
+        });
+      }
 
-      // To reset state and hide optional sections for the next entry
-      updateForm({
-        moodId: '',
-        notes: '',
-        color: '#78C0A8',
-        tagDraft: '',
-        spotifyLink: '',
-        imageData: null,
-        visibility: 'private',
-      });
+      updateForm(buildInitialForm(null));
       setShowSpotifyInput(false);
       setShowImagePicker(false);
       setShowMoodPicker(false);
@@ -116,16 +136,22 @@ export default function MoodEntryForm({ onClose }) {
     <section className="relative">
       <form
         onSubmit={handleSubmit}
-        className="card relative max-h-[90vh] w-full overflow-hidden border border-white/70 bg-white/95 shadow-soft"
+        className="card relative max-h-[90vh] w-full overflow-hidden border border-white/70 bg-white/95 shadow-soft dark:border-slate-600/80 dark:bg-slate-900/95"
         aria-label="Mood entry form"
       >
         <div className="bg-gradient-to-b from-white to-slate-50/60 px-6 pt-6 sm:px-8 sm:pt-7">
           <div className="flex items-start justify-between gap-4 border-b border-white/80 pb-4">
             <div className="flex flex-col gap-1">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Share an update</p>
-              <h2 className="text-2xl font-semibold text-midnight">How are you feeling right now?</h2>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                {editingEntry?.id ? 'Edit entry' : 'Share an update'}
+              </p>
+              <h2 className="text-2xl font-semibold text-midnight">
+                {editingEntry?.id ? 'Update this mood' : 'How are you feeling right now?'}
+              </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Capture this moment with mood, notes, tags, and optional media.
+                {editingEntry?.id
+                  ? 'Adjust how this moment is captured—your original date and time stay the same.'
+                  : 'Capture this moment with mood, notes, tags, and optional media.'}
               </p>
             </div>
             {typeof onClose === 'function' && (
@@ -179,6 +205,7 @@ export default function MoodEntryForm({ onClose }) {
                       key={option.id}
                       type="button"
                       onClick={() => handleMoodSelect(option.id)}
+                      aria-label={`Select mood ${option.label}`}
                       className={`group relative flex w-20 flex-col items-center gap-2 rounded-2xl border border-transparent px-4 py-3 transition ${
                         option.id === form.moodId
                           ? 'bg-white shadow-soft ring-2 ring-teal/40'
@@ -306,20 +333,18 @@ export default function MoodEntryForm({ onClose }) {
                   type="button"
                   onClick={() => updateForm({ imageData: null })}
                   className="absolute right-4 top-4 rounded-full bg-midnight/70 px-3 py-1 text-sm text-white shadow-lg transition hover:bg-midnight/80"
+                  aria-label="Remove attached photo"
                 >
                   Remove photo
                 </button>
               </div>
             )}
 
-            <div className="flex items-center justify-between rounded-2xl border border-white/80 bg-white/80 px-4 py-4 text-sm text-slate-600">
-              <div className="flex flex-col">
-                <span className="font-semibold text-midnight">Privacy</span>
-                <span>Entries stay private unless you explicitly share them.</span>
-              </div>
-              <span className="rounded-full bg-slate-900/80 px-3 py-1 text-xs uppercase tracking-wide text-white">
-                Private
-              </span>
+            <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-4 text-sm text-slate-600">
+              <span className="font-semibold text-midnight">Privacy</span>
+              <p className="mt-1 text-slate-600">
+                Your entries are visible only to you while signed in. Public sharing is not available in this version of the app.
+              </p>
             </div>
           </div>
         </div>
@@ -330,15 +355,7 @@ export default function MoodEntryForm({ onClose }) {
             disabled={isSubmitting}
             onClick={() => {
               if (typeof onClose === 'function') onClose();
-              updateForm({
-                moodId: '',
-                notes: '',
-                color: '#78C0A8',
-                tagDraft: '',
-                spotifyLink: '',
-                imageData: null,
-                visibility: 'private',
-              });
+              updateForm(buildInitialForm(null));
               setErrors({});
               setShowSpotifyInput(false);
               setShowImagePicker(false);
@@ -353,7 +370,15 @@ export default function MoodEntryForm({ onClose }) {
             disabled={isSubmitting || !form.moodId || !form.notes.trim()}
             className="btn btn-primary flex w-full items-center justify-center gap-2 bg-white/10 text-base font-semibold tracking-wide text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/50"
           >
-            {isSubmitting ? 'Posting...' : selectedMood ? `${selectedMood.emoji} Post` : 'Post'}
+            {isSubmitting
+              ? editingEntry?.id
+                ? 'Saving...'
+                : 'Posting...'
+              : editingEntry?.id
+                ? 'Save changes'
+                : selectedMood
+                  ? `${selectedMood.emoji} Post`
+                  : 'Post'}
           </button>
         </div>
       </form>
@@ -361,7 +386,7 @@ export default function MoodEntryForm({ onClose }) {
       {showSuccess && (
         <div className="pointer-events-none absolute inset-x-0 -bottom-8 flex justify-center">
           <div className="rounded-full bg-midnight/90 px-5 py-2 text-sm text-white shadow-lg">
-            Entry saved — beautiful work.
+            {editingEntry?.id ? 'Changes saved.' : 'Entry saved — beautiful work.'}
           </div>
         </div>
       )}

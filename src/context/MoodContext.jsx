@@ -1,55 +1,20 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getFirestoreUserMessage } from '../utils/firestoreErrors.js';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from 'firebase/firestore';
-import { auth, db } from '../config/firebase.js';
-
-const MoodContext = createContext(undefined);
-
-const toIsoString = (value) => {
-  if (!value) return null;
-  if (typeof value === 'string') return value;
-  if (typeof value?.toDate === 'function') return value.toDate().toISOString();
-  if (value instanceof Date) return value.toISOString();
-  return null;
-};
-
-const normalizeEntry = (id, entry) => {
-  const createdAt = toIsoString(entry.createdAt) ?? toIsoString(entry.timestamp) ?? new Date().toISOString();
-  const dateTime = entry.dateTime ?? createdAt;
-  return {
-    id,
-    ...entry,
-    note: entry.note ?? entry.notes ?? '',
-    tags: Array.isArray(entry.tags) ? entry.tags : [],
-    dateTime,
-    createdAt,
-    updatedAt: toIsoString(entry.updatedAt) ?? createdAt,
-    favorite: Boolean(entry.favorite),
-  };
-};
+  addUserEntry,
+  deleteUserEntry,
+  setEntryFavorite,
+  subscribeUserEntries,
+  updateUserEntry,
+} from '../services/moodService.js';
+import { MoodContext } from './moodContext.js';
+import { useAuth } from './useAuth.js';
 
 export const MoodProvider = ({ children }) => {
+  const { user: currentUser } = useAuth();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentUser, setCurrentUser] = useState(() => auth.currentUser);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     if (!currentUser?.uid) {
@@ -61,18 +26,18 @@ export const MoodProvider = ({ children }) => {
 
     setLoading(true);
     setError('');
-    const entriesRef = collection(db, 'users', currentUser.uid, 'entries');
-    const entriesQuery = query(entriesRef, orderBy('dateTime', 'desc'));
-    const unsubscribe = onSnapshot(
-      entriesQuery,
-      (snapshot) => {
-        const nextEntries = snapshot.docs.map((entryDoc) => normalizeEntry(entryDoc.id, entryDoc.data()));
+    const unsubscribe = subscribeUserEntries(
+      currentUser.uid,
+      (nextEntries) => {
         setEntries(nextEntries);
         setLoading(false);
+        setError('');
       },
       (snapshotError) => {
         console.error('Failed to subscribe to mood entries', snapshotError);
-        setError('We could not load your entries right now. Please try again.');
+        setError(
+          getFirestoreUserMessage(snapshotError, 'We could not load your entries right now. Please try again.'),
+        );
         setEntries([]);
         setLoading(false);
       },
@@ -81,7 +46,7 @@ export const MoodProvider = ({ children }) => {
     return () => unsubscribe();
   }, [currentUser?.uid]);
 
-  const addEntry = async (payload) => {
+  const addEntry = useCallback(async (payload) => {
     if (!currentUser?.uid) {
       const authError = new Error('You must be signed in to add an entry.');
       setError(authError.message);
@@ -89,25 +54,18 @@ export const MoodProvider = ({ children }) => {
     }
 
     setError('');
-    const now = new Date().toISOString();
-    const entry = {
-      favorite: false,
-      dateTime: payload.dateTime ?? now,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      ...payload,
-    };
 
     try {
-      await addDoc(collection(db, 'users', currentUser.uid, 'entries'), entry);
+      await addUserEntry(currentUser.uid, payload);
     } catch (writeError) {
       console.error('Failed to add mood entry', writeError);
-      setError('We could not save your entry. Please try again.');
-      throw writeError;
+      const msg = getFirestoreUserMessage(writeError, 'We could not save your entry. Please try again.');
+      setError(msg);
+      throw new Error(msg);
     }
-  };
+  }, [currentUser?.uid]);
 
-  const toggleFavorite = async (id) => {
+  const toggleFavorite = useCallback(async (id) => {
     if (!currentUser?.uid) {
       const authError = new Error('You must be signed in to update an entry.');
       setError(authError.message);
@@ -119,18 +77,16 @@ export const MoodProvider = ({ children }) => {
     setError('');
 
     try {
-      await updateDoc(doc(db, 'users', currentUser.uid, 'entries', id), {
-        favorite: !target.favorite,
-        updatedAt: serverTimestamp(),
-      });
+      await setEntryFavorite(currentUser.uid, id, !target.favorite);
     } catch (writeError) {
       console.error('Failed to toggle favorite', writeError);
-      setError('We could not update this favorite right now. Please try again.');
-      throw writeError;
+      const msg = getFirestoreUserMessage(writeError, 'We could not update this favorite right now. Please try again.');
+      setError(msg);
+      throw new Error(msg);
     }
-  };
+  }, [currentUser?.uid, entries]);
 
-  const removeEntry = async (id) => {
+  const removeEntry = useCallback(async (id) => {
     if (!currentUser?.uid) {
       const authError = new Error('You must be signed in to remove an entry.');
       setError(authError.message);
@@ -139,13 +95,32 @@ export const MoodProvider = ({ children }) => {
 
     setError('');
     try {
-      await deleteDoc(doc(db, 'users', currentUser.uid, 'entries', id));
+      await deleteUserEntry(currentUser.uid, id);
     } catch (deleteError) {
       console.error('Failed to remove entry', deleteError);
-      setError('We could not delete this entry right now. Please try again.');
-      throw deleteError;
+      const msg = getFirestoreUserMessage(deleteError, 'We could not delete this entry right now. Please try again.');
+      setError(msg);
+      throw new Error(msg);
     }
-  };
+  }, [currentUser?.uid]);
+
+  const updateEntry = useCallback(async (id, patch) => {
+    if (!currentUser?.uid) {
+      const authError = new Error('You must be signed in to update an entry.');
+      setError(authError.message);
+      throw authError;
+    }
+
+    setError('');
+    try {
+      await updateUserEntry(currentUser.uid, id, patch);
+    } catch (writeError) {
+      console.error('Failed to update mood entry', writeError);
+      const msg = getFirestoreUserMessage(writeError, 'We could not save your changes. Please try again.');
+      setError(msg);
+      throw new Error(msg);
+    }
+  }, [currentUser?.uid]);
 
   const value = useMemo(
     () => ({
@@ -153,21 +128,13 @@ export const MoodProvider = ({ children }) => {
       loading,
       error,
       addEntry,
+      updateEntry,
       toggleFavorite,
       removeEntry,
       favorites: entries.filter((entry) => entry.favorite),
     }),
-    [entries, loading, error],
+    [entries, loading, error, addEntry, updateEntry, toggleFavorite, removeEntry],
   );
 
   return <MoodContext.Provider value={value}>{children}</MoodContext.Provider>;
 };
-
-export const useMoods = () => {
-  const ctx = useContext(MoodContext);
-  if (!ctx) {
-    throw new Error('useMoods must be used within a MoodProvider');
-  }
-  return ctx;
-};
-

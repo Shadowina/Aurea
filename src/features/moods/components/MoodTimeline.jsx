@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import MoodCard from './MoodCard.jsx';
-import { useMoods } from '../../../context/MoodContext.jsx';
+import { resolveEntryTimestamp } from '../../insights/utils/dateKeys.js';
+import { useMoods } from '../../../context/useMoods.js';
 
 const formatDay = (isoString) => {
   if (!isoString) return '';
@@ -18,7 +20,9 @@ export default function MoodTimeline({
   showFavoritesOnly,
   onShowFavoritesOnlyChange,
   selectedTags = [],
+  onEditEntry,
 }) {
+  const { t } = useTranslation();
   const { entries, loading, error } = useMoods();
 
   const filteredEntries = useMemo(() => {
@@ -39,15 +43,19 @@ export default function MoodTimeline({
           .toLowerCase();
         return haystack.includes(lowerQuery);
       })
-      .sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime));
+      .sort((a, b) => {
+        const tb = resolveEntryTimestamp(b);
+        const ta = resolveEntryTimestamp(a);
+        return new Date(tb || 0) - new Date(ta || 0);
+      });
   }, [entries, searchQuery, showFavoritesOnly, selectedTags]);
 
   return (
     <section className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Timeline</p>
-          <h2 className="text-2xl font-semibold text-midnight">Mood history</h2>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{t('timeline.label')}</p>
+          <h2 className="text-2xl font-semibold text-midnight dark:text-slate-100">{t('timeline.title')}</h2>
          
         </div>
 
@@ -56,17 +64,17 @@ export default function MoodTimeline({
             type="search"
             value={searchQuery}
             onChange={(event) => onSearchQueryChange(event.target.value)}
-            placeholder="Search notes or tags"
-            className="rounded-full border border-neutral bg-white/70 px-5 py-2 text-sm text-midnight placeholder:text-slate-400 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
+            placeholder={t('timeline.searchPlaceholder')}
+            className="rounded-full border border-neutral bg-white/70 px-5 py-2 text-sm text-midnight placeholder:text-slate-400 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
-          <label className="flex items-center gap-2 text-sm font-medium text-midnight">
+          <label className="flex items-center gap-2 text-sm font-medium text-midnight dark:text-slate-300">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border border-neutral text-teal focus:ring-teal/40"
+              className="h-4 w-4 rounded border border-neutral text-teal focus:ring-teal/40 dark:border-slate-600 dark:bg-slate-900/60"
               checked={showFavoritesOnly}
               onChange={(event) => onShowFavoritesOnlyChange(event.target.checked)}
             />
-            Favorites only
+            {t('timeline.favoritesOnly')}
           </label>
         </div>
       </header>
@@ -76,7 +84,7 @@ export default function MoodTimeline({
           {selectedTags.map((tag) => (
             <span
               key={tag}
-              className="rounded-full bg-teal/15 px-3 py-1 text-xs font-semibold text-teal"
+              className="rounded-full bg-teal/15 px-3 py-1 text-xs font-semibold text-teal dark:bg-teal/25 dark:text-teal-300"
             >
               #{tag}
             </span>
@@ -85,24 +93,42 @@ export default function MoodTimeline({
       )}
 
       {loading ? (
-        <div className="card border border-white/70 px-6 py-12 text-center text-slate-500">
-          <p className="text-lg font-medium text-midnight">Loading entries...</p>
-          <p className="text-sm text-slate-500">Fetching your mood timeline.</p>
+        <div
+          className="card border border-white/70 px-6 py-12 dark:border-slate-700/80"
+          role="status"
+          aria-busy="true"
+          aria-label="Loading mood timeline"
+        >
+          <div className="mx-auto max-w-md space-y-4">
+            <div className="h-5 w-48 rounded-lg bg-slate-200/90 dark:bg-slate-700/90">
+              <div className="h-full w-full animate-pulse rounded-lg bg-slate-200/70 dark:bg-slate-700/70" />
+            </div>
+            <div className="space-y-3">
+              <div className="h-4 w-full rounded-md bg-slate-100 dark:bg-slate-800">
+                <div className="h-full w-full animate-pulse rounded-md bg-slate-200/60 dark:bg-slate-700/60" />
+              </div>
+              <div className="h-4 w-[88%] rounded-md bg-slate-100 dark:bg-slate-800">
+                <div className="h-full w-full animate-pulse rounded-md bg-slate-200/60 dark:bg-slate-700/60" />
+              </div>
+              <div className="h-4 w-[72%] rounded-md bg-slate-100 dark:bg-slate-800">
+                <div className="h-full w-full animate-pulse rounded-md bg-slate-200/60 dark:bg-slate-700/60" />
+              </div>
+            </div>
+            <p className="text-center text-sm text-slate-500 dark:text-slate-400">{t('timeline.fetching')}</p>
+          </div>
         </div>
       ) : error ? (
-        <div className="card border border-peach/40 bg-peach/5 px-6 py-8 text-center text-slate-600">
-          <p className="text-lg font-medium text-midnight">Could not load entries</p>
+        <div className="card border border-peach/40 bg-peach/5 px-6 py-8 text-center text-slate-600 dark:border-peach/30 dark:bg-peach/10 dark:text-slate-300">
+          <p className="text-lg font-medium text-midnight dark:text-slate-200">{t('timeline.couldNotLoad')}</p>
           <p className="mt-1 text-sm">{error}</p>
         </div>
       ) : filteredEntries.length === 0 ? (
-        <div className="card border border-dashed border-neutral/70 px-6 py-12 text-center text-slate-500">
-          <p className="text-lg font-medium text-midnight">
-            {searchQuery || showFavoritesOnly || selectedTags.length > 0 ? 'No matching entries' : 'No entries yet'}
+        <div className="card border border-dashed border-neutral/70 px-6 py-12 text-center text-slate-500 dark:border-slate-700/80 dark:text-slate-400">
+          <p className="text-lg font-medium text-midnight dark:text-slate-200">
+            {searchQuery || showFavoritesOnly || selectedTags.length > 0 ? t('timeline.noMatching') : t('timeline.noEntriesYet')}
           </p>
-          <p className="text-sm text-slate-500">
-            {searchQuery || showFavoritesOnly || selectedTags.length > 0
-              ? 'Try changing your filters or search query.'
-              : 'Once you log moods, they will appear here with the most recent at the top.'}
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {searchQuery || showFavoritesOnly || selectedTags.length > 0 ? t('timeline.tryFilters') : t('timeline.emptyHint')}
           </p>
         </div>
       ) : (
@@ -110,9 +136,9 @@ export default function MoodTimeline({
           {filteredEntries.map((entry) => (
             <div key={entry.id} className="space-y-3">
               <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-                {formatDay(entry.dateTime)}
+                {formatDay(resolveEntryTimestamp(entry))}
               </p>
-              <MoodCard entry={entry} />
+              <MoodCard entry={entry} onEdit={onEditEntry} />
             </div>
           ))}
         </div>
